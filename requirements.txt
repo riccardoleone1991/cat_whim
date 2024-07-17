@@ -1,0 +1,14 @@
+black
+flake8
+isort
+loguru
+pip
+python-dotenv
+tqdm
+typer
+pandas
+matplotlib
+numpy
+nilearn
+scipy
+-e .
