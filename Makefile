@@ -5,6 +5,7 @@
 PROJECT_NAME = cat_whim
 PYTHON_VERSION = 3.11
 PYTHON_INTERPRETER = python
+SHELL=/bin/bash
 
 #################################################################################
 # COMMANDS                                                                      #
@@ -55,12 +56,19 @@ create_environment:
 #################################################################################
 # PROJECT RULES                                                                 #
 #################################################################################
+## Select Subjects
+.PHONY: select
+data: requirements
+	$(PYTHON_INTERPRETER) cat_whim/select_subjects_to_download.py
 
 
 ## Make Dataset
 .PHONY: data
 data: requirements
+	module load singularity
 	$(PYTHON_INTERPRETER) cat_whim/dataset.py
+	sbatch cat_whim/run_smriprep.sh
+	
 
 
 #################################################################################

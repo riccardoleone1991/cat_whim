@@ -4,7 +4,7 @@
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-In this project we want to assess the combined effect of amyloid, tau and white matter hyperintensity-related disconnections on cortical thickness in different stages of Alzheimer's Disease
+In this project we want to assess the Combined effect of Amyloid, Tau and WHIte Matter hyperintensity-related disconnections on cortical thickness in different stages of Alzheimer's Diseases (CAT-WHIM).
 
 ## Project Organization
 
@@ -44,7 +44,7 @@ In this project we want to assess the combined effect of amyloid, tau and white 
     ├── __init__.py    <- Makes cat_whim a Python module
     │
     ├── data           <- Scripts to download or generate data
-    │   └── make_dataset.py
+    │   └── dataset.py
     │
     ├── features       <- Scripts to turn raw data into features for modeling
     │   └── build_features.py
@@ -60,3 +60,24 @@ In this project we want to assess the combined effect of amyloid, tau and white 
 
 --------
 
+
+# Current status: 2024-08-13
+Running sMRIPREP longitudinal
+
+TODO: 
+
+--------
+
+- Run sMRIPREP longitudinal
+- Collate results from sMRIPrep Freesurfer
+- Start analyzing!
+
+
+## How to use
+NOTE: This project is almost fully automated, but still needs a bit of human effort in order to select the subjects to download, since one needs to have access to ADNI in order to download their data.
+
+In this study we make use of amyloid and tau PET preprocessed data from UC Berkeley (e.g., UCBERKELEY_AMY_6MM_17Jul2024.csv). First, you need to download them from the ADNI website into the data/raw folder.
+
+1. You first need to run 'make select' to create a list of subjects with available PET data at the same timepoint (defined to be 6 months interval between amyloid an tau PET or viceversa). This will create a .csv file (saved in data/utils) containing the names of the subjects to download. Copy/paste it into the ADNI website under Download --> Image Collections --> Advanced Search --> Subject ID, select T1 and T2 and create a new collection of images called cat_whim. Please note that this will also add some sequences that are neither T1 nor FLAIR, but to avoid the tedious choice of selecting which sequence to download for each patient for all patient, we download some data that we are not going to use and then filter it later based on sequence names. If you have data storage concerns, you can select only the specific sequence names corresponding to T1 and FLAIR for each subject. Next go to Data Collections --> cat_whim --> Not downloaded --> select all subjects --> click advanced download and download the .csv file containing the links (URL List, bottom right) saving it in data/utils/cat_whim_url_list.csv
+2. Change the settings of run_smriprep.sh to your own folder/HPC settings --> my cat_whim is under /home/leoner/Projects/cat_whim, you should change to yours...
+3. Now you can just run 'make data'. This will automatically download data, check that downloaded subjects match those that you wanted to download and get rid of unused sequences.

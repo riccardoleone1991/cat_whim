@@ -1,5 +1,11 @@
 # Data
 /data/
+# Singims
+/singims/
+#Documents
+/docs/
+#Reports
+/reports/
 
 # Mac OS-specific storage files
 .DS_Store
