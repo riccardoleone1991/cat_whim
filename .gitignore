@@ -6,6 +6,8 @@
 /docs/
 #Reports
 /reports/
+#Slurmlogs
+/slurmlogs/
 
 # Mac OS-specific storage files
 .DS_Store

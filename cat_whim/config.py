@@ -31,6 +31,12 @@ INCL_EXCL_FLW_DIR = REPORTS_DIR / "incl_excl_flowchart"
 SINGIMS_DIR = PROJ_ROOT / "singims"
 
 
+if not BIDS_DATA_DIR.exists():
+    BIDS_DATA_DIR.mkdir()
+
+if not INCL_EXCL_FLW_DIR.exists():
+    INCL_EXCL_FLW_DIR.mkdir()
+
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135
 try:

@@ -11,14 +11,11 @@
 # %%
 import pandas as pd
 import numpy as np
-import typer
 
 from loguru import logger
 from pandas.tseries.offsets import MonthEnd
 
 from cat_whim.config import RAW_DATA_DIR, INTERIM_DATA_DIR, INCL_EXCL_FLW_DIR
-
-app = typer.Typer()
 
 
 def load_df_berkeley(date_amy, date_tau):
@@ -62,18 +59,13 @@ def filter_dfs_same_timepoint(df_amy, df_tau):
     return n_amy_tau_same_tp, df_amy_tau_filtered
 
 
-def get_only_first_two_timepoints(df_amy_tau_filtered):
+def get_longitudinal_number(df_amy_tau_filtered):
 
     # Assign ranks to each SCANDATE_amy within each subject (PTID)
-    df_amy_tau_filtered["visit"] = df_amy_tau_filtered.groupby("PTID").cumcount()
-    # Group by PTID and filter for subjects with at least two timepoints
-    df_amy_tau_with_fu = df_amy_tau_filtered.groupby("PTID").filter(lambda x: len(x) >= 2)
-    # Keep only the first two visits (visit 0 and visit 1)
-    df_amy_tau_with_fu = df_amy_tau_with_fu[df_amy_tau_with_fu["visit"].isin([0, 1])]
-    # Get the number of subjects with longitudinal data
-    n_amy_tau_with_fu = df_amy_tau_with_fu["PTID"].unique().shape[0]
+    df_amy_tau_filtered["session"] = df_amy_tau_filtered.groupby("PTID").cumcount()
+    df_amy_tau_filtered["session"] = df_amy_tau_filtered["session"].apply(lambda x : "M0" + str(x))
 
-    return n_amy_tau_with_fu, df_amy_tau_with_fu
+    return df_amy_tau_filtered
 
 
 def get_dk_labels_from_df_berkeley(df):
@@ -115,13 +107,13 @@ def check_same_tracer(df):
     list_tracers = ["TRACER_amy", "TRACER_tau"]
     list_subjs_different_tracer = []
     for tracer in list_tracers:
-        # Compute nunique values for each PTID
+        # Compute nunique values of tracer for each PTID
         nunique_counts = df.groupby("PTID")[tracer].nunique()
-        # Filter out subjects where nunique is equal to 1
+        # Filter out subjects where nunique is not equal to 1
         subjs_different_tracer = [sub for sub in nunique_counts[nunique_counts != 1].index]
-        if len(subjs_different_tracer) > 1:
-            for sub in subjs_different_tracer:
-                list_subjs_different_tracer.append(sub)
+        if len(subjs_different_tracer) >= 1:
+            for subj in subjs_different_tracer:
+                list_subjs_different_tracer.append(subj)
     df_amy_tau_final = df[~df["PTID"].isin(list_subjs_different_tracer)].copy()
     n_subjs_same_tracer = df_amy_tau_final["PTID"].unique().shape[0]
     return n_subjs_same_tracer, df_amy_tau_final
@@ -131,7 +123,6 @@ def save_df_incl_excl(
     n_amy_init,
     n_tau_init,
     n_amy_tau_same_tp,
-    n_amy_tau_with_fu,
     n_passed_qc,
     n_same_tracer,
     n_amyFBP_final,
@@ -147,9 +138,8 @@ def save_df_incl_excl(
             "N initial amyloid": [n_amy_init],
             "N initial tau": [n_tau_init],
             "N initial with both amy and tau same timepoint": [n_amy_tau_same_tp],
-            "N with amy and tau with two or more timepoints": [n_amy_tau_with_fu],
-            "N with amy and tau with two or more timepoints after quality check": [n_passed_qc],
-            "N with amy and tau with two or more timepoints after quality check and same tracer in both timepoints": [
+            "N with amy and tau same timepoint after quality check": [n_passed_qc],
+            "N with amy and tau same timepoint after quality check and same tracer in both timepoints": [
                 n_same_tracer
             ],
             "N amy and tau with two or more timepoints after quality check and same tracer (FBP)": n_amyFBP_final,
@@ -157,10 +147,9 @@ def save_df_incl_excl(
         }
     )
 
-    df_incl_excl.to_csv(INCL_EXCL_FLW_DIR / "df_inclusion_exclusion_longitudinal_tau_amyloid.csv")
+    df_incl_excl.to_csv(INCL_EXCL_FLW_DIR / "df_inclusion_exclusion_longitudinal_tau_amyloid.csv", index=None)
     return df_incl_excl
 
-@app.command()
 def main():
 
     logger.info(
@@ -183,10 +172,9 @@ def main():
     # 2. Make sure that amyloid and tau scans were acquired within 6 months from one another
     n_amy_tau_same_tp, df_amy_tau_filtered = filter_dfs_same_timepoint(df_amy, df_tau)
 
-    # 3. Filter to only get the first 2 timepoints. This will be the limit for our analysis
-    n_amy_tau_with_fu, df_amy_tau_with_fu = get_only_first_two_timepoints(df_amy_tau_filtered)
-    logger.info(f"There are {n_amy_tau_with_fu} subjects with amyloid and tau at the same timepoint for 2 timepoints or more")
-    logger.info("We will only analyze the baseline and one follow up study")
+    # 3. Get the session number 
+    df_amy_tau_with_fu = get_longitudinal_number(df_amy_tau_filtered)
+    logger.info(f"There are {n_amy_tau_same_tp} subjects with amyloid and tau at the same timepoint")
 
     # 4. Perform quality check for amy/tau pet scan and check nans
     n_passed_qc, df_amy_tau_with_fu_qc = qc_berkeley(df_amy_tau_with_fu)
@@ -199,7 +187,7 @@ def main():
         df_amy_tau_with_fu_qc
     )
     n_different_tracer = n_passed_qc - n_same_tracer
-    logger.warning(f"{n_different_tracer} subjects have different tracers at the baseline and first follow-up. These are not comparable, so we drop these subjects.")
+    logger.warning(f"{n_different_tracer} subjects have different tracers at the baseline and one of the follow-ups. These are not comparable, so we drop these subjects.")
     logger.info(f"{n_same_tracer} subjects passed all preprocessing and have the same tracer in all studies.")
 
     # 6. Separate the dataframes based on amy tracer (tau is the same in our case)
@@ -213,9 +201,10 @@ def main():
     n_amyFBP_final = df_amyFBP_tau_final["PTID"].unique().shape[0]
     n_amyFBB_final = df_amyFBB_tau_final["PTID"].unique().shape[0]
 
-    df_amyFBP_tau_final.to_csv(INTERIM_DATA_DIR / "df_amyFBP_tau_final.csv", index=None)
-    df_amyFBB_tau_final.to_csv(INTERIM_DATA_DIR / "df_amyFBB_tau_final.csv", index=None)
-    logger.success("Created separate dfs for subjects who underwent both scans with the same tracer (FBP-PET or FBB-PET)")
+    df_amy_tau_with_fu_qc_same_tracer.to_csv(INTERIM_DATA_DIR / "df_amyBoth_tau_to_download.csv", index=None)
+    df_amyFBP_tau_final.to_csv(INTERIM_DATA_DIR / "df_amyFBP_tau_to_download.csv", index=None)
+    df_amyFBB_tau_final.to_csv(INTERIM_DATA_DIR / "df_amyFBB_tau_to_download.csv", index=None)
+    logger.success("Created complete and separate dfs for subjects who underwent both scans with the same tracer (FBP-PET or FBB-PET)")
     logger.info(f"The FBP-PET df contains {n_amyFBP_final} subects...")
     logger.info(f"The FBB-PET df contains {n_amyFBB_final} subects...")
 
@@ -231,7 +220,6 @@ def main():
         n_amy_init,
         n_tau_init,
         n_amy_tau_same_tp,
-        n_amy_tau_with_fu,
         n_passed_qc,
         n_same_tracer,
         n_amyFBP_final,
@@ -247,6 +235,4 @@ def main():
     logger.success("UC Berkeley preprocessing completed succesfully! Now you can download the subjects' MRI data from the ADNI website!")
 
 if __name__ == "__main__":
-    app()
-
-# %%
+    main()

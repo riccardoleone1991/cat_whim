@@ -58,18 +58,23 @@ create_environment:
 #################################################################################
 ## Select Subjects
 .PHONY: select
-data: requirements
+select: requirements
+
 	$(PYTHON_INTERPRETER) cat_whim/select_subjects_to_download.py
 
 
 ## Make Dataset
+
 .PHONY: data
 data: requirements
-	module load singularity
-	$(PYTHON_INTERPRETER) cat_whim/dataset.py
-	sbatch cat_whim/run_smriprep.sh
-	
 
+	$(PYTHON_INTERPRETER) cat_whim/dataset.py
+	sbatch cat_whim/run_freesurfer_longitudinal.sh
+	bash cat_whim/gather_fs_stats.sh
+	sbatch cat_whim/run_smriprep.sh
+	sbatch cat_whim/run_wmh_segmentations.sh
+	$(PYTHON_INTERPRETER) cat_whim/wmh_segmentation_postprocessing.py
+	$(PYTHON_INTERPRETER) cat_whim/make_final_dataset.py
 
 #################################################################################
 # Self Documenting Commands                                                     #

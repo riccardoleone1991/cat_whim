@@ -7,8 +7,13 @@ python-dotenv
 tqdm
 typer
 pandas
-matplotlib
+matplotlib==3.7.3
 numpy
 nilearn
 scipy
+seaborn
+antspyx
+antspynet
+statannotations
+pysimplebrainplot
 -e .
