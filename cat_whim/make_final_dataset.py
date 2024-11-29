@@ -7,6 +7,7 @@ from cat_whim.config import (
     INCL_EXCL_FLW_DIR,
     RAW_DATA_DIR,
     INTERIM_DATA_DIR,
+    UTILS_DATA_DIR,
     BIDS_DATA_DIR,
     PROCESSED_DATA_DIR,
 )
@@ -38,8 +39,12 @@ def format_df_aparc(df):
 def format_df_adnimerge(df):
     adnimerge_cols_to_keep = [
         "PTID",
+        "RID",
+        "EXAMDATE",
         "AGE",
         "PTGENDER",
+        "RAVLT_forgetting",
+        "ADAS13",
         "DX_bl",
         "DX",
         "PTEDUCAT",
@@ -78,7 +83,7 @@ def format_df_amy_tau(df, dk_regions):
     amy_labels = [reg + "_SUVR_amy" for reg in dk_regions]
     tau_labels = [reg + "_SUVR_tau" for reg in dk_regions]
     df["PTID"] = df["PTID"].apply(lambda x: "sub-ADNI" + x.replace("_", ""))
-    filter_labels = ["PTID", "session", "TRACER_amy", "TRACER_tau", "AMYLOID_STATUS"] + amy_labels + tau_labels
+    filter_labels = ["PTID", "session", "TRACER_amy", "TRACER_tau", "AMYLOID_STATUS", "META_TEMPORAL_SUVR"] + amy_labels + tau_labels
     df = df[filter_labels].copy()
 
     return df
@@ -138,7 +143,6 @@ def update_df_incl_excl(df_data,
     df_incl_excl["N without DX"] = df_to_calc["DX"].isna().sum()
     df_incl_excl["N without MMSE"] = df_to_calc["MMSE"].isna().sum()
     df_incl_excl["N without APOE4"] = df_to_calc["APOE4"].isna().sum()
-
     df_to_calc.dropna(subset=["MMSE", "DX", "AGE"], inplace=True)
     df_to_calc_complete_apoe = df_to_calc.dropna(subset=["APOE4"])
     df_incl_excl["N included analyses without APOE"] = df_to_calc["PTID"].nunique()
@@ -201,6 +205,30 @@ def create_df_long_format(df_m00_m01, df_m01, dk_regions, mean_or_region = "mean
 
     return df_long
 
+
+def exclude_infarcts(df):
+    
+    df_infarcts = pd.read_csv(UTILS_DATA_DIR / "MRI_INFARCTS_01_29_21_30Oct2024.csv")
+    df_inf = df_infarcts[df_infarcts["RID"].isin(df["RID"])]
+    df_inf_final = df_inf[df_inf["SIDE"] != "-"].sort_values(by=["RID", "MRI.DATE1"]).drop_duplicates(subset=["RID"], keep="first")
+    infarcts_to_remove = []
+    for rid in df_inf_final["RID"]:
+        date_df = df[df["RID"] == rid]["EXAMDATE"].values[0]
+        date_inf = df_inf_final[df_inf_final["RID"] == rid]["MRI.DATE1"].values[0]
+        if date_df > date_inf:
+            infarcts_to_remove.append(rid)
+        else:
+            continue
+    df = df[~df["RID"].isin(infarcts_to_remove)].copy()
+    n_infarcts = len(infarcts_to_remove)
+    return df, n_infarcts
+
+def exclude_ad(df):
+    n_dementia = df[df["DX"] == "Dementia"]["PTID"].nunique()
+    df = df[df["DX"]!= "Dementia"].reset_index(drop=True).copy()
+    return df, n_dementia
+
+
 def main():
     # Load dataframes
     df_adnimerge = pd.read_csv(INTERIM_DATA_DIR / "df_adnimerge_after_cross_checking.csv")
@@ -259,22 +287,6 @@ def main():
     # Check that who has ses-M01 also has ses-M00
     df_adnimerge_imaging = check_session_m01_has_m00(df_adnimerge_imaging)
 
-    # Get the regional column names for each biomarker
-    disconn_cols = [col for col in df_disconn.columns if col.endswith("disconn")]
-    amy_cols = [
-        col for col in df_amy_tau.columns if col.endswith("amy") if col not in ["TRACER_amy"]
-    ]
-    tau_cols = [
-        col for col in df_amy_tau.columns if col.endswith("tau") if col not in ["TRACER_tau"]
-    ]
-    thick_cols = [col for col in df_aparc_lh_rh.columns if col.endswith("THICKNESS")]
-
-    # Calculate some single-measure summary for biomarkers
-    df_adnimerge_imaging["mean_SUVR_amy"] = df_adnimerge_imaging[amy_cols].mean(axis=1)
-    df_adnimerge_imaging["mean_SUVR_tau"] = df_adnimerge_imaging[tau_cols].mean(axis=1)
-    df_adnimerge_imaging["mean_disconn"] = df_adnimerge_imaging[disconn_cols].mean(axis=1)
-    df_adnimerge_imaging["mean_thickness"] = df_adnimerge_imaging[thick_cols].mean(axis=1)
-
     # Calculate the years from M00
     df_adnimerge_imaging = (
         df_adnimerge_imaging.groupby("PTID", group_keys=True)
@@ -283,49 +295,20 @@ def main():
     )
     df_adnimerge_imaging.reset_index(drop=True, inplace=True)
 
-    # Create a DataFrame with only M00 and one with only M01
-    df_adnimerge_imaging_m00 = df_adnimerge_imaging[df_adnimerge_imaging["session"] == "M00"].copy()
-    df_adnimerge_imaging_m01 = df_adnimerge_imaging[df_adnimerge_imaging["session"] == "M01"].copy()
+    df_adnimerge_imaging, n_infarcts = exclude_infarcts(df_adnimerge_imaging)
+    df_adnimerge_imaging, n_dementia = exclude_ad(df_adnimerge_imaging)
 
-    #Also filter the M00 DataFrame for subjects who have M01, it will be useful later for plotting
-    df_adnimerge_imaging_m00_m01 = df_adnimerge_imaging_m00[df_adnimerge_imaging_m00["PTID"].isin(df_adnimerge_imaging_m01["PTID"])]
-
-    # Create two datasets in wide format: one with complete data except for APOE status...
-    df_adnimerge_imaging.dropna(subset=["MMSE", "DX", "AGE"], inplace=True)
-    df_adnimerge_imaging_m00.dropna(subset=["MMSE", "DX", "AGE"], inplace=True)
-    df_adnimerge_imaging.reset_index(drop=True, inplace=True)
-    df_adnimerge_imaging_m00.reset_index(drop=True, inplace=True)
-
-    # ... and one with complete data including APOE status
-    df_adnimerge_imaging_complete_apoe = df_adnimerge_imaging.dropna(subset=["APOE4"])
-    df_adnimerge_imaging_m00_complete_apoe = df_adnimerge_imaging_m00.dropna(subset=["APOE4"])
-    df_adnimerge_imaging_complete_apoe.reset_index(drop=True, inplace=True)
-    df_adnimerge_imaging_m00_complete_apoe.reset_index(drop=True, inplace=True)
-
-    # Create DataFrames in long format for subjects with longitudinal data mainly for easier plotting
-    df_adnimerge_imaging_long_mean = create_df_long_format(df_adnimerge_imaging_m00_m01, df_adnimerge_imaging_m01, dk_regions_lh_rh, mean_or_region = "mean")
-    df_adnimerge_imaging_long_regional = create_df_long_format(df_adnimerge_imaging_m00_m01, df_adnimerge_imaging_m01, dk_regions_lh_rh, mean_or_region = "region")
-    df_adnimerge_imaging_complete_apoe_long_mean = df_adnimerge_imaging_long_mean[df_adnimerge_imaging_long_mean["PTID"].isin(df_adnimerge_imaging_m00_complete_apoe["PTID"])].copy()
-    df_adnimerge_imaging_complete_apoe_long_regional = df_adnimerge_imaging_long_regional[df_adnimerge_imaging_long_regional["PTID"].isin(df_adnimerge_imaging_m00_complete_apoe["PTID"])].copy()
+    df_incl_excl = pd.read_csv(INCL_EXCL_FLW_DIR / "df_inclusion_exclusion_longitudinal_tau_amyloid.csv")
+    df_incl_excl["Infarcts"] = n_infarcts
+    df_incl_excl["Dementia"] = n_dementia
+    df_incl_excl.to_csv(INCL_EXCL_FLW_DIR / "df_inclusion_exclusion_longitudinal_tau_amyloid.csv", index=None)
 
     # Update the inclusion/exclusion DataFrame
     update_df_incl_excl(df_adnimerge_imaging, common_ptids, ptids_amy_tau)
-
+    df_adnimerge_imaging.dropna(subset=["MMSE", "AGE", "DX", "PTEDUCAT"], inplace=True)
+    
     # Save what we need
     df_adnimerge_imaging.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze.csv", index=None)
-    df_adnimerge_imaging_complete_apoe.to_csv(
-        PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_complete_apoe.csv", index=None
-    )
-    df_adnimerge_imaging_m00.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_m00.csv", index=None)
-    df_adnimerge_imaging_m00_complete_apoe.to_csv(
-        PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_m00_complete_apoe.csv", index=None
-    )
-
-    df_adnimerge_imaging_long_mean.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_long_format_mean.csv", index=None)
-    df_adnimerge_imaging_long_regional.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_long_format_regional.csv", index=None)
-    df_adnimerge_imaging_complete_apoe_long_mean.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_long_format_mean_complete_apoe.csv", index=None)
-    df_adnimerge_imaging_complete_apoe_long_regional.to_csv(PROCESSED_DATA_DIR / "df_cat_whim_to_analyze_long_format_regional_complete_apoe.csv", index=None)
-
     logger.success("Datasets created correctly! You can start analyzing!")
 
 if __name__ == "__main__":

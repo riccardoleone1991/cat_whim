@@ -453,12 +453,12 @@ def run_heudiconv(input_path: Path = INTERIM_DATA_DIR / "ADNI"):
 
 def main():
 
-    logger.info("Processing dataset...")
-    logger.info("Downloading data...")
-    download_dataset_adni()
-    logger.success("Data downloaded correctly!")
-    check_download_match()
-    logger.info("Merging Amy/tau dfs with adnimerge and imaging.")
+    # logger.info("Processing dataset...")
+    # logger.info("Downloading data...")
+    # download_dataset_adni()
+    # logger.success("Data downloaded correctly!")
+    # check_download_match()
+    # logger.info("Merging Amy/tau dfs with adnimerge and imaging.")
 
     df_adnimerge = load_df_adnimerge()
     df_mri_download = load_df_mri()
@@ -469,14 +469,14 @@ def main():
     df_mri_filtered_with_both_seqs = select_complete_mri(df_mri_filtered)
     name_of_df_min_subjs = perform_checks(df_amy_tau, df_adni_filtered, df_mri_filtered_with_both_seqs, )
     df_amy_tau_final, df_adni_final, df_mri_final = filter_save_dfs(name_of_df_min_subjs, df_amy_tau, df_adni_filtered, df_mri_filtered_with_both_seqs)
-    logger.success("Dataframes processed correctly. Find them in data/interim.")
-    logger.info("Cleaning the downloaded data folders")
-    clean_downloaded_folders(df_mri_final)
-    logger.success("Cleanup completed!")
-    logger.info("Converting to BIDS format using Heudiconv...")
-    run_heudiconv()
-    logger.success("Data converted to BIDS correctly")
-    logger.success("Dataset preprocessing complete!")
+    # logger.success("Dataframes processed correctly. Find them in data/interim.")
+    # logger.info("Cleaning the downloaded data folders")
+    # clean_downloaded_folders(df_mri_final)
+    # logger.success("Cleanup completed!")
+    # logger.info("Converting to BIDS format using Heudiconv...")
+    # run_heudiconv()
+    # logger.success("Data converted to BIDS correctly")
+    # logger.success("Dataset preprocessing complete!")
 
 if __name__ == "__main__":
     is_sure = input("Are you sure you want to download the data and process it? [y/n]")
